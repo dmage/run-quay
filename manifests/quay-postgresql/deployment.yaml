@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quay-postgresql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quay-postgresql
+  template:
+    metadata:
+      labels:
+        app: quay-postgresql
+    spec:
+      containers:
+      - env:
+        - name: POSTGRESQL_USER
+          value: quay
+        - name: POSTGRESQL_PASSWORD
+          value: quay
+        - name: POSTGRESQL_DATABASE
+          value: quay
+        image: registry.redhat.io/rhel8/postgresql-12:latest
+        name: postgresql
+        ports:
+        - containerPort: 5432
+        resources: {}
+        volumeMounts:
+        - name: postgresql-start
+          mountPath: /opt/app-root/src/postgresql-start
+      volumes:
+      - name: postgresql-start
+        configMap:
+          name: quay-postgresql-postgresql-start

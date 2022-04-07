@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quay-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quay-redis
+  template:
+    metadata:
+      labels:
+        app: quay-redis
+    spec:
+      containers:
+      - image: registry.redhat.io/rhel8/redis-6
+        name: redis
+        ports:
+        - containerPort: 6379
+        resources: {}

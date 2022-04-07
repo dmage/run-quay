@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quay-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quay-app
+  template:
+    metadata:
+      labels:
+        app: quay-app
+    spec:
+      containers:
+      - image: image-registry.openshift-image-registry.svc:5000/obulatov-test/quay:latest
+        name: quay
+        ports:
+        - containerPort: 8080
+        resources: {}
+        volumeMounts:
+        - name: config
+          mountPath: /quay-registry/conf/stack
+      volumes:
+      - name: config
+        configMap:
+          name: quay-app-config

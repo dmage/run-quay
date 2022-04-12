@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -150,6 +151,29 @@ func CreateNamespace(ctx context.Context, kubeClient kubernetes.Interface, tekto
 	return namespaceName, nil
 }
 
+// DeleteOldNamespaces deletes namespaces with the label run-quay=true that are
+// older than 12 hours.
+func DeleteOldNamespaces(ctx context.Context, kubeClient kubernetes.Interface) error {
+	namespaces, err := kubeClient.CoreV1().Namespaces().List(ctx, metav1.ListOptions{
+		LabelSelector: "run-quay=true",
+	})
+	if err != nil {
+		return fmt.Errorf("error listing namespaces: %w", err)
+	}
+	var errs []error
+	for _, namespace := range namespaces.Items {
+		age := time.Since(namespace.CreationTimestamp.Time)
+		if age > 12*time.Hour {
+			klog.Infof("deleting old namespace %s (%s old)", namespace.Name, age.Round(time.Second))
+			err := kubeClient.CoreV1().Namespaces().Delete(ctx, namespace.Name, metav1.DeleteOptions{})
+			if err != nil {
+				errs = append(errs, fmt.Errorf("error deleting namespace %s: %w", namespace.Name, err))
+			}
+		}
+	}
+	return utilerrors.NewAggregate(errs)
+}
+
 func main() {
 	klog.InitFlags(nil)
 	flag.Parse()
@@ -175,6 +199,16 @@ func main() {
 	if err != nil {
 		klog.Exitf("error creating tekton client: %v", err)
 	}
+
+	go func() {
+		for {
+			err := DeleteOldNamespaces(ctx, kubeClient)
+			if err != nil {
+				klog.Errorf("error deleting old namespaces: %v", err)
+			}
+			time.Sleep(10 * time.Minute)
+		}
+	}()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

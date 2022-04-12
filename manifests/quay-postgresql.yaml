@@ -1,3 +1,16 @@
+---
+apiVersion: v1
+data:
+  create-extensions.sh: |
+    #!/bin/sh -eu
+    psql --set ON_ERROR_STOP=1 -d quay <<EOF
+    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+    EOF
+kind: ConfigMap
+metadata:
+  creationTimestamp: null
+  name: quay-postgresql-postgresql-start
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -32,3 +45,14 @@ spec:
       - name: postgresql-start
         configMap:
           name: quay-postgresql-postgresql-start
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quay-postgresql
+spec:
+  ports:
+  - port: 5432
+    protocol: TCP
+  selector:
+    app: quay-postgresql

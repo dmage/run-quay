@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Run Quay</title>
+</head>
+<body>
+<script>
+function onSubmit(event) {
+  event.target.addEventListener('submit', function(e) { e.preventDefault(); });
+  var submit = document.querySelectorAll('input[type="submit"]')[0];
+  submit.value = 'Creating...';
+  submit.disabled = true;
+}
+</script>
+<h1>Run Quay</h1>
+<form action="/" method="POST" onsubmit="onSubmit(event)">
+<label for="pr">Pull Request Number:</label>
+<input type="text" name="pr" id="pr">
+<input type="submit" value="Run">
+</form>
+</body>
+</html>

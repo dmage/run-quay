@@ -1,0 +1,19 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: deploy-quay-app
+spec:
+  workspaces:
+  - name: manifests
+  params:
+  - name: namespace
+    description: The current namespace
+    type: string
+  steps:
+  - name: apply
+    image: image-registry.openshift-image-registry.svc:5000/openshift/cli:latest
+    workingDir: /workspace/manifests
+    command: ["/bin/bash", "-c"]
+    args:
+    - |
+      cat ./quay-app.yaml | sed 's/{{NAMESPACE}}/$(inputs.params.namespace)/g' | oc apply -f -

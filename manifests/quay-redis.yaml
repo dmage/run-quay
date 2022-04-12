@@ -1,3 +1,4 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,3 +19,14 @@ spec:
         ports:
         - containerPort: 6379
         resources: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quay-redis
+spec:
+  ports:
+  - port: 6379
+    protocol: TCP
+  selector:
+    app: quay-redis

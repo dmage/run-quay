@@ -1,15 +1,50 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quay-app
+  annotations:
+    app.openshift.io/connects-to: |
+      [
+        {"apiVersion":"apps/v1","kind":"Deployment","name":"quay-redis"},
+        {"apiVersion":"apps/v1","kind":"Deployment","name":"quay-postgresql"}
+      ]
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quay-app
+  template:
+    metadata:
+      labels:
+        app: quay-app
+    spec:
+      containers:
+      - image: image-registry.openshift-image-registry.svc:5000/{{NAMESPACE}}/quay:latest
+        name: quay
+        ports:
+        - containerPort: 8080
+        resources: {}
+        volumeMounts:
+        - name: config
+          mountPath: /quay-registry/conf/stack
+      volumes:
+      - name: config
+        secret:
+          secretName: quay-app-config
+---
 apiVersion: v1
-data:
+stringData:
   config.yaml: |
     SUPER_USERS:
     - admin
     AUTHENTICATION_TYPE: Database
     BITTORRENT_FILENAME_PEPPER: 0ee18f90-5b6d-42d2-ab5e-ec9fcd846272
     BUILDLOGS_REDIS:
-      host: quay-redis.obulatov-test.svc
+      host: quay-redis.{{NAMESPACE}}.svc
       port: 6379
     DATABASE_SECRET_KEY: '30060361640793187613697366923211113205676925445650250274752125083971638376224'
-    DB_URI: postgresql://quay:quay@quay-postgresql.obulatov-test.svc/quay
+    DB_URI: postgresql://quay:quay@quay-postgresql.{{NAMESPACE}}.svc/quay
     DEFAULT_TAG_EXPIRATION: 2w
     DISTRIBUTED_STORAGE_CONFIG:
       default:
@@ -67,10 +102,22 @@ data:
     USERFILES_LOCATION: default
     USERFILES_PATH: userfiles/
     USER_EVENTS_REDIS:
-      host: quay-redis.obulatov-test.svc
+      host: quay-redis.{{NAMESPACE}}.svc
       port: 6379
     USE_CDN: false
     FEATURE_QUOTA_MANAGEMENT: True
-kind: ConfigMap
+kind: Secret
 metadata:
   name: quay-app-config
+type: Opaque
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quay-app
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+  selector:
+    app: quay-app

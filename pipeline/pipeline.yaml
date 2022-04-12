@@ -5,6 +5,7 @@ metadata:
 spec:
   workspaces:
   - name: shared-workspace
+  - name: manifests
   params:
   - name: git-url
     type: string
@@ -12,11 +13,20 @@ spec:
   - name: git-revision
     type: string
     description: revision to be used from repo of the code for deployment
-    default: pipelines-1.7
   - name: image
     type: string
     description: image to be build from the code
+  - name: namespace
+    type: string
+    description: the current namespace
   tasks:
+  - name: deploy-dependencies
+    taskRef:
+      name: deploy-dependencies
+      kind: Task
+    workspaces:
+    - name: manifests
+      workspace: manifests
   - name: fetch-repository
     taskRef:
       name: git-clone
@@ -45,3 +55,16 @@ spec:
       workspace: shared-workspace
     runAfter:
     - fetch-repository
+  - name: deploy-quay-app
+    taskRef:
+      name: deploy-quay-app
+      kind: Task
+    workspaces:
+    - name: manifests
+      workspace: manifests
+    params:
+    - name: namespace
+      value: $(params.namespace)
+    runAfter:
+    - deploy-dependencies
+    - build-image

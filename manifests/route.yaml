@@ -1,7 +1,8 @@
+---
 kind: Route
 apiVersion: route.openshift.io/v1
 metadata:
-  name: quay
+  name: registry
 spec:
   to:
     kind: Service

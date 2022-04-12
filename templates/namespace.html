@@ -15,19 +15,19 @@
 <body>
 <h1>Run Quay</h1>
 <div><a href="https://github.com/quay/quay/pull/{{index .Namespace.Annotations "run-quay/pr-number"}}">Pull Request</a></div>
-<div><a href="https://console-openshift-console.apps.test.gcp.quaydev.org/project-details/ns/{{.Namespace.ObjectMeta.Name}}">Namespace</a></div>
-<div><a href="https://console-openshift-console.apps.test.gcp.quaydev.org/topology/ns/{{.Namespace.ObjectMeta.Name}}">Topology</a></div>
+<div><a href="{{.ConsoleURL}}/project-details/ns/{{.Namespace.ObjectMeta.Name}}">Namespace</a></div>
+<div><a href="{{.ConsoleURL}}/topology/ns/{{.Namespace.ObjectMeta.Name}}">Topology</a></div>
 {{if eq .Succeeded "Unknown"}}
-<div class="status"><a href="https://console-openshift-console.apps.test.gcp.quaydev.org/k8s/ns/{{.Namespace.ObjectMeta.Name}}/tekton.dev~v1beta1~PipelineRun/build">PipelineRun is running</a></div>
+<div class="status"><a href="{{.ConsoleURL}}/k8s/ns/{{.Namespace.ObjectMeta.Name}}/tekton.dev~v1beta1~PipelineRun/build">PipelineRun is running</a></div>
 <div>The instance will be ready {{if gt .EstimatedCompletionTime 0}}in {{.EstimatedCompletionTime}}{{else}} anytime soon{{end}}</div>
 <meta http-equiv="refresh" content="10">
 {{end}}
 {{if eq .Succeeded "True"}}
-<div><a href="https://console-openshift-console.apps.test.gcp.quaydev.org/k8s/ns/{{.Namespace.ObjectMeta.Name}}/tekton.dev~v1beta1~PipelineRun/build">PipelineRun</a></div>
+<div><a href="{{.ConsoleURL}}/k8s/ns/{{.Namespace.ObjectMeta.Name}}/tekton.dev~v1beta1~PipelineRun/build">PipelineRun</a></div>
 <div class="status"><a href="https://registry-{{.Namespace.ObjectMeta.Name}}.apps.test.gcp.quaydev.org">Quay instance</a></div>
 {{end}}
 {{if eq .Succeeded "False"}}
-<div style="status failed"><a href="https://console-openshift-console.apps.test.gcp.quaydev.org/k8s/ns/{{.Namespace.ObjectMeta.Name}}/tekton.dev~v1beta1~PipelineRun/build">PipelineRun has failed</a></div>
+<div style="status failed"><a href="{{.ConsoleURL}}/k8s/ns/{{.Namespace.ObjectMeta.Name}}/tekton.dev~v1beta1~PipelineRun/build">PipelineRun has failed</a></div>
 {{end}}
 </body>
 </html>

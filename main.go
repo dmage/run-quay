@@ -32,7 +32,8 @@ var (
 )
 
 var (
-	addr = flag.String("addr", ":8080", "The address to serve on")
+	addr       = flag.String("addr", ":8080", "The address to serve on")
+	consoleURL = flag.String("console-url", "https://console.apps.test.gcp.quaydev.org", "The URL of the console")
 )
 
 var (
@@ -274,11 +275,13 @@ func main() {
 
 				r.Header.Set("Content-Type", "text/html")
 				err = templates.ExecuteTemplate(w, "namespace.html", struct {
+					ConsoleURL              string
 					Namespace               *corev1.Namespace
 					PipelineRun             *tektonv1beta1.PipelineRun
 					Succeeded               corev1.ConditionStatus
 					EstimatedCompletionTime time.Duration
 				}{
+					ConsoleURL:              *consoleURL,
 					Namespace:               namespace,
 					PipelineRun:             pipelineRun,
 					Succeeded:               succeeded,

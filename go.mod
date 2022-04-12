@@ -3,11 +3,13 @@ module github.com/dmage/run-quay
 go 1.17
 
 require (
+	github.com/openshift/client-go v0.0.0-20220411091747-c100636b0bc0
 	github.com/tektoncd/pipeline v0.34.1
 	k8s.io/api v0.23.5
 	k8s.io/apimachinery v0.23.5
 	k8s.io/client-go v1.5.2
 	k8s.io/klog/v2 v2.60.1
+	knative.dev/pkg v0.0.0-20220131144930-f4b57aef0006
 )
 
 require (
@@ -46,6 +48,7 @@ require (
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
+	github.com/openshift/api v3.9.0+incompatible // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.11.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
@@ -75,7 +78,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	k8s.io/kube-openapi v0.0.0-20220124234850-424119656bbf // indirect
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9 // indirect
-	knative.dev/pkg v0.0.0-20220131144930-f4b57aef0006 // indirect
 	sigs.k8s.io/json v0.0.0-20211208200746-9f7c6b3444d2 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.1 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect

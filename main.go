@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	routeclientset "github.com/openshift/client-go/route/clientset/versioned"
 	tektonv1beta1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	tektonclientset "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	corev1 "k8s.io/api/core/v1"
@@ -42,6 +43,10 @@ var (
 	templates        = template.Must(template.ParseFS(templatesContent, "templates/*.html"))
 )
 
+var (
+	errNoRoute = fmt.Errorf("no hostname found in route status")
+)
+
 // CreatePipelineObjects runs a script to create the objects required for a pipeline.
 func CreatePipelineObjects(ctx context.Context, namespace string) error {
 	cmd := exec.Command("./create-pipeline.sh", namespace)
@@ -54,8 +59,22 @@ func CreatePipelineObjects(ctx context.Context, namespace string) error {
 	return nil
 }
 
+// GetRouteHostname returns the hostname of the registry route in the given namespace.
+func GetRouteHostname(ctx context.Context, routeClient routeclientset.Interface, namespace string) (string, error) {
+	route, err := routeClient.RouteV1().Routes(namespace).Get(ctx, "registry", metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("error getting route: %w", err)
+	}
+	for _, ingress := range route.Status.Ingress {
+		if ingress.Host != "" {
+			return ingress.Host, nil
+		}
+	}
+	return "", errNoRoute
+}
+
 // CreateNamespace creates a new namespace for a Quay instance.
-func CreateNamespace(ctx context.Context, kubeClient kubernetes.Interface, tektonClient tektonclientset.Interface, prNumber int) (string, error) {
+func CreateNamespace(ctx context.Context, kubeClient kubernetes.Interface, tektonClient tektonclientset.Interface, routeClient routeclientset.Interface, prNumber int) (string, error) {
 	namespaceName := fmt.Sprintf("quay-%d-%s", prNumber, rand.String(5))
 	namespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -110,6 +129,13 @@ func CreateNamespace(ctx context.Context, kubeClient kubernetes.Interface, tekto
 					Value: tektonv1beta1.ArrayOrString{
 						Type:      tektonv1beta1.ParamTypeString,
 						StringVal: namespaceName,
+					},
+				},
+				{
+					Name: "hostname",
+					Value: tektonv1beta1.ArrayOrString{
+						Type:      tektonv1beta1.ParamTypeString,
+						StringVal: fmt.Sprintf("registry-%s.apps.test.gcp.quaydev.org", namespaceName), // FIXME: use the hostname from the route
 					},
 				},
 			},
@@ -201,6 +227,11 @@ func main() {
 		klog.Exitf("error creating tekton client: %v", err)
 	}
 
+	routeClient, err := routeclientset.NewForConfig(config)
+	if err != nil {
+		klog.Exitf("error creating route client: %v", err)
+	}
+
 	go func() {
 		for {
 			err := DeleteOldNamespaces(ctx, kubeClient)
@@ -231,7 +262,7 @@ func main() {
 					http.Error(w, "invalid PR number", http.StatusBadRequest)
 					return
 				}
-				namespaceName, err := CreateNamespace(ctx, kubeClient, tektonClient, prNumber)
+				namespaceName, err := CreateNamespace(ctx, kubeClient, tektonClient, routeClient, prNumber)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return

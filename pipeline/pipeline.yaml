@@ -19,6 +19,9 @@ spec:
   - name: namespace
     type: string
     description: the current namespace
+  - name: hostname
+    type: string
+    description: the hostname that should be used by Quay
   tasks:
   - name: deploy-dependencies
     taskRef:
@@ -65,6 +68,8 @@ spec:
     params:
     - name: namespace
       value: $(params.namespace)
+    - name: hostname
+      value: $(params.hostname)
     runAfter:
     - deploy-dependencies
     - build-image

@@ -9,6 +9,9 @@ spec:
   - name: namespace
     description: The current namespace
     type: string
+  - name: hostname
+    description: The hostname that should be used by Quay
+    type: string
   steps:
   - name: apply
     image: image-registry.openshift-image-registry.svc:5000/openshift/cli:latest
@@ -16,4 +19,7 @@ spec:
     command: ["/bin/bash", "-c"]
     args:
     - |
-      cat ./quay-app.yaml | sed 's/{{NAMESPACE}}/$(inputs.params.namespace)/g' | oc apply -f -
+      cat ./quay-app.yaml | sed '
+        s/{{NAMESPACE}}/$(inputs.params.namespace)/g
+        s/{{HOSTNAME}}/$(inputs.params.hostname)/g
+      ' | oc apply -f -

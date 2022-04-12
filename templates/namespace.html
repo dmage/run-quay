@@ -7,7 +7,7 @@
   font-size: 200%;
   margin: 5px 0;
 }
-.failed {
+.failed, .failed a {
   color: #900;
 }
 </style>
@@ -27,7 +27,7 @@
 <div class="status"><a href="https://registry-{{.Namespace.ObjectMeta.Name}}.apps.test.gcp.quaydev.org">Quay instance</a></div>
 {{end}}
 {{if eq .Succeeded "False"}}
-<div style="status failed"><a href="{{.ConsoleURL}}/k8s/ns/{{.Namespace.ObjectMeta.Name}}/tekton.dev~v1beta1~PipelineRun/build">PipelineRun has failed</a></div>
+<div class="status failed"><a href="{{.ConsoleURL}}/k8s/ns/{{.Namespace.ObjectMeta.Name}}/tekton.dev~v1beta1~PipelineRun/build">PipelineRun has failed</a></div>
 {{end}}
 </body>
 </html>

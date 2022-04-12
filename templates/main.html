@@ -2,6 +2,30 @@
 <html>
 <head>
 <title>Run Quay</title>
+<style>
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  justify-content: space-between;
+  margin: 0;
+}
+
+.container {
+  margin: 8px;
+}
+
+.build-version {
+  color: #999;
+  font-size: 80%;
+  height: 3em;
+  line-height: 3em;
+}
+
+.build-version a {
+  color: #999;
+}
+</style>
 </head>
 <body>
 <script>
@@ -12,11 +36,14 @@ function onSubmit(event) {
   submit.disabled = true;
 }
 </script>
-<h1>Run Quay</h1>
-<form action="/" method="POST" onsubmit="onSubmit(event)">
-<label for="pr">Pull Request Number:</label>
-<input type="text" name="pr" id="pr">
-<input type="submit" value="Run">
-</form>
+<div class="container">
+  <h1>Run Quay</h1>
+  <form action="/" method="POST" onsubmit="onSubmit(event)">
+  <label for="pr">Pull Request Number:</label>
+  <input type="text" name="pr" id="pr">
+  <input type="submit" value="Run">
+  </form>
+</div>
+<div class="container build-version">Built from <a href="https://github.com/dmage/run-quay/commit/{{.Commit}}">{{.Commit}}</a></div>
 </body>
 </html>

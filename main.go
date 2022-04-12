@@ -25,6 +25,11 @@ import (
 	"knative.dev/pkg/apis"
 )
 
+// Compile time constants
+var (
+	Commit = "main"
+)
+
 var (
 	addr = flag.String("addr", ":8080", "The address to serve on")
 )
@@ -177,7 +182,11 @@ func main() {
 			switch r.Method {
 			case http.MethodGet, http.MethodHead:
 				r.Header.Set("Content-Type", "text/html")
-				err := templates.ExecuteTemplate(w, "main.html", nil)
+				err := templates.ExecuteTemplate(w, "main.html", struct {
+					Commit string
+				}{
+					Commit: Commit,
+				})
 				if err != nil {
 					klog.Errorf("error executing template: %v", err)
 				}

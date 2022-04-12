@@ -37,7 +37,10 @@ spec:
         name: postgresql
         ports:
         - containerPort: 5432
-        resources: {}
+        resources:
+          requests:
+            cpu: 4m
+            memory: 40Mi
         volumeMounts:
         - name: postgresql-start
           mountPath: /opt/app-root/src/postgresql-start

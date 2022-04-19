@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- ./pipeline.yaml
+- ./task-deploy-dependencies.yaml
+- ./task-deploy-quay-app.yaml
+configMapGenerator:
+- files:
+  - ./manifests/quay-app.yaml
+  - ./manifests/quay-postgresql.yaml
+  - ./manifests/quay-redis.yaml
+  - ./manifests/route.yaml
+  name: manifests
+  options:
+    disableNameSuffixHash: true

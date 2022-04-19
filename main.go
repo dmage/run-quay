@@ -7,24 +7,29 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"os"
-	"os/exec"
 	"strconv"
 	"time"
 
+	"github.com/dmage/run-quay/pipeline"
+	routev1 "github.com/openshift/api/route/v1"
 	routeclientset "github.com/openshift/client-go/route/clientset/versioned"
+	"github.com/ricardomaraschini/plumber"
 	tektonv1beta1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	tektonclientset "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	"knative.dev/pkg/apis"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/kustomize/api/types"
 )
 
 // Compile time constants
@@ -47,14 +52,36 @@ var (
 	errNoRoute = fmt.Errorf("no hostname found in route status")
 )
 
-// CreatePipelineObjects runs a script to create the objects required for a pipeline.
-func CreatePipelineObjects(ctx context.Context, namespace string) error {
-	cmd := exec.Command("./create-pipeline.sh", namespace)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("error running script: %w", err)
+// CreatePipelineObjects creates the objects required for a pipeline.
+func CreatePipelineObjects(ctx context.Context, controllerClient client.Client, namespace string) error {
+	// sets up some "mutators" so we can intercept the objects before they are created in
+	// the api. we can also mutate the kustomization.yaml file here.
+	opts := []plumber.Option{
+		plumber.WithKustomizeMutator(
+			func(_ context.Context, k *types.Kustomization) error {
+				// here we mutate the kustomization.yaml file
+				// present inside the directory we are
+				// rendering. Makes sense to change the
+				// namespace globally (i.e. here) to all
+				// objects instead of in an object by object
+				// manner (through an ObjectMutator below).
+				k.Namespace = namespace
+				return nil
+			},
+		),
+		plumber.WithObjectMutator(
+			func(ctx context.Context, obj client.Object) error {
+				// here we can mutate the objects before they
+				// are created or patched. Any change is
+				// possible.
+				return nil
+			},
+		),
+	}
+
+	creator := plumber.NewRenderer(controllerClient, pipeline.FS, opts...)
+	if err := creator.Render(ctx, "base"); err != nil {
+		return fmt.Errorf("error rendering pipeline: %w", err)
 	}
 	return nil
 }
@@ -74,7 +101,7 @@ func GetRouteHostname(ctx context.Context, routeClient routeclientset.Interface,
 }
 
 // CreateNamespace creates a new namespace for a Quay instance.
-func CreateNamespace(ctx context.Context, kubeClient kubernetes.Interface, tektonClient tektonclientset.Interface, routeClient routeclientset.Interface, prNumber int) (string, error) {
+func CreateNamespace(ctx context.Context, kubeClient kubernetes.Interface, tektonClient tektonclientset.Interface, routeClient routeclientset.Interface, controllerClient client.Client, prNumber int) (string, error) {
 	namespaceName := fmt.Sprintf("quay-%d-%s", prNumber, rand.String(5))
 	namespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -92,7 +119,7 @@ func CreateNamespace(ctx context.Context, kubeClient kubernetes.Interface, tekto
 		return "", fmt.Errorf("error creating namespace: %w", err)
 	}
 
-	err = CreatePipelineObjects(ctx, namespaceName)
+	err = CreatePipelineObjects(ctx, controllerClient, namespaceName)
 	if err != nil {
 		return "", fmt.Errorf("error creating pipeline objects: %w", err)
 	}
@@ -207,6 +234,20 @@ func main() {
 
 	ctx := context.Background()
 
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		klog.Exitf("error adding corev1 to scheme: %w", err)
+	}
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		klog.Exitf("error adding appsv1 to scheme: %w", err)
+	}
+	if err := tektonv1beta1.AddToScheme(scheme); err != nil {
+		klog.Exitf("error adding tektonv1beta1 to scheme: %w", err)
+	}
+	if err := routev1.AddToScheme(scheme); err != nil {
+		klog.Exitf("error adding routev1 to scheme: %w", err)
+	}
+
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 
 	configOverrides := &clientcmd.ConfigOverrides{}
@@ -230,6 +271,11 @@ func main() {
 	routeClient, err := routeclientset.NewForConfig(config)
 	if err != nil {
 		klog.Exitf("error creating route client: %v", err)
+	}
+
+	controllerClient, err := client.New(config, client.Options{Scheme: scheme})
+	if err != nil {
+		klog.Exitf("error creating controller client: %v", err)
 	}
 
 	go func() {
@@ -262,7 +308,7 @@ func main() {
 					http.Error(w, "invalid PR number", http.StatusBadRequest)
 					return
 				}
-				namespaceName, err := CreateNamespace(ctx, kubeClient, tektonClient, routeClient, prNumber)
+				namespaceName, err := CreateNamespace(ctx, kubeClient, tektonClient, routeClient, controllerClient, prNumber)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return

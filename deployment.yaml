@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: run-quay
+  namespace: run-quay
+  annotations:
+    alpha.image.policy.openshift.io/resolve-names: '*'
+    image.openshift.io/triggers: |
+      [{"from":{"kind":"ImageStreamTag","name":"run-quay:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"run-quay\")].image"}]
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: run-quay
+  template:
+    metadata:
+      labels:
+        app: run-quay
+    spec:
+      containers:
+      - image: run-quay:latest
+        name: run-quay
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            cpu: 10m
+            memory: 50Mi
+          limits:
+            cpu: 100m
+            memory: 100Mi
+      serviceAccountName: run-quay

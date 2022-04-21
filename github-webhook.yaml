@@ -1,0 +1,19 @@
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: github-webhook
+  namespace: run-quay
+spec:
+  refreshInterval: 24h
+  secretStoreRef:
+    name: secretstore
+    kind: ClusterSecretStore
+  target:
+    name: github-webhook
+    creationPolicy: Owner
+    deletionPolicy: Delete
+  data:
+  - secretKey: WebHookSecretKey
+    remoteRef:
+      key: test-cluster
+      property: run-quay/github-webhook

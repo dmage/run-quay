@@ -1,0 +1,8 @@
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: run-quay
+  namespace: run-quay
+spec:
+  lookupPolicy:
+    local: false

@@ -1,0 +1,25 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: build
+  namespace: run-quay
+spec:
+  triggers:
+    - type: GitHub
+      github:
+        secretReference:
+          name: github-webhook
+    - type: ImageChange
+    - type: ConfigChange
+  source:
+    type: Git
+    git:
+      uri: https://github.com/dmage/run-quay.git
+      ref: main
+  strategy:
+    type: Docker
+    dockerStrategy:
+  output:
+    to:
+      kind: ImageStreamTag
+      name: 'run-quay:latest'

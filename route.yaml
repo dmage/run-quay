@@ -9,4 +9,5 @@ spec:
   tls:
     insecureEdgeTerminationPolicy: Redirect
   to:
+    kind: Service
     name: run-quay

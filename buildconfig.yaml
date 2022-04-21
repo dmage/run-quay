@@ -9,7 +9,6 @@ spec:
       github:
         secretReference:
           name: github-webhook
-    - type: ImageChange
     - type: ConfigChange
   source:
     type: Git

@@ -2,6 +2,7 @@
 <html>
 <head>
 <title>Run Quay</title>
+<link rel="stylesheet" href="https://unpkg.com/purecss@2.1.0/build/pure-min.css" integrity="sha384-yHIFVG6ClnONEA5yB5DJXfW2/KC173DIQrYoZMEtBvGzmf0PKiGyNEqe9N6BNDBH" crossorigin="anonymous">
 <style>
 body {
   display: flex;
@@ -15,15 +16,33 @@ body {
   margin: 8px;
 }
 
-.build-version {
+.container--main {
+  margin: 2em auto;
+  width: 100%;
+  max-width: 600px;
+}
+
+.container--build-version {
   color: #999;
   font-size: 80%;
   height: 3em;
   line-height: 3em;
 }
 
-.build-version a {
+.container--build-version a {
   color: #999;
+}
+
+.form-field {
+  margin-bottom: 1em;
+}
+
+.form-field label {
+  display: block;
+}
+
+.form-field input, .form-field textarea {
+  width: 100%;
 }
 </style>
 </head>
@@ -36,14 +55,24 @@ function onSubmit(event) {
   submit.disabled = true;
 }
 </script>
-<div class="container">
+<div class="container container--main">
   <h1>Run Quay</h1>
   <form action="/" method="POST" onsubmit="onSubmit(event)">
-  <label for="pr">Pull Request Number:</label>
-  <input type="text" name="pr" id="pr">
+  <div class="form-field">
+    <label for="pr">Pull Request Number:</label>
+    <input type="text" name="pr" id="pr">
+  </div>
+  <details class="form-field">
+    <summary>Advanced</summary>
+    <div>
+      <label for="config">Extra config parameters:</label>
+      <textarea name="config" id="config"></textarea>
+      <div><code>BROWSER_API_CALLS_XHR_ONLY: false</code><br>Allows to use tools like Swagger UI.</div>
+    </div>
+  </details>
   <input type="submit" value="Run">
   </form>
 </div>
-<div class="container build-version">Built from <a href="https://github.com/dmage/run-quay/commits/{{.Commit}}">{{.Commit}}</a></div>
+<div class="container container--build-version">Built from <a href="https://github.com/dmage/run-quay/commits/{{.Commit}}">{{.Commit}}</a></div>
 </body>
 </html>

@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -24,12 +25,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/rand"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	"knative.dev/pkg/apis"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/kustomize/api/types"
+	"sigs.k8s.io/yaml"
 )
 
 // Compile time constants
@@ -46,6 +49,9 @@ var (
 	//go:embed templates
 	templatesContent embed.FS
 	templates        = template.Must(template.ParseFS(templatesContent, "templates/*.html"))
+
+	//go:embed config.yaml
+	configContent embed.FS
 )
 
 var (
@@ -89,6 +95,9 @@ func CreatePipelineObjects(ctx context.Context, controllerClient client.Client, 
 // GetRouteHostname returns the hostname of the registry route in the given namespace.
 func GetRouteHostname(ctx context.Context, routeClient routeclientset.Interface, namespace string) (string, error) {
 	route, err := routeClient.RouteV1().Routes(namespace).Get(ctx, "registry", metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		return "", errNoRoute
+	}
 	if err != nil {
 		return "", fmt.Errorf("error getting route: %w", err)
 	}
@@ -100,8 +109,49 @@ func GetRouteHostname(ctx context.Context, routeClient routeclientset.Interface,
 	return "", errNoRoute
 }
 
+// RenderConfig generates the config.yaml file.
+func RenderConfig(namespace string, hostname string, overrides map[string]interface{}) (string, error) {
+	f, err := configContent.Open("config.yaml")
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	buf, err := io.ReadAll(f)
+	if err != nil {
+		return "", err
+	}
+
+	config := map[string]interface{}{
+		"DB_URI": fmt.Sprintf("postgresql://quay:quay@quay-postgresql.%s.svc/quay", namespace),
+		"BUILDLOGS_REDIS": map[string]interface{}{
+			"host": fmt.Sprintf("quay-redis.%s.svc", namespace),
+			"port": 6379,
+		},
+		"USER_EVENTS_REDIS": map[string]interface{}{
+			"host": fmt.Sprintf("quay-redis.%s.svc", namespace),
+			"port": 6379,
+		},
+		"SERVER_HOSTNAME": hostname,
+	}
+	if err := yaml.Unmarshal(buf, &config); err != nil {
+		return "", err
+	}
+
+	for k, v := range overrides {
+		config[k] = v
+	}
+
+	result, err := yaml.Marshal(config)
+	if err != nil {
+		return "", err
+	}
+
+	return string(result), nil
+}
+
 // CreateNamespace creates a new namespace for a Quay instance.
-func CreateNamespace(ctx context.Context, kubeClient kubernetes.Interface, tektonClient tektonclientset.Interface, routeClient routeclientset.Interface, controllerClient client.Client, prNumber int) (string, error) {
+func CreateNamespace(ctx context.Context, kubeClient kubernetes.Interface, tektonClient tektonclientset.Interface, routeClient routeclientset.Interface, controllerClient client.Client, prNumber int, overrides map[string]interface{}) (string, error) {
 	namespaceName := fmt.Sprintf("quay-%d-%s", prNumber, rand.String(5))
 	namespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -121,7 +171,7 @@ func CreateNamespace(ctx context.Context, kubeClient kubernetes.Interface, tekto
 
 	err = CreatePipelineObjects(ctx, controllerClient, namespaceName)
 	if err != nil {
-		return "", fmt.Errorf("error creating pipeline objects: %w", err)
+		return namespaceName, fmt.Errorf("error creating pipeline objects: %w", err)
 	}
 
 	_, err = tektonClient.TektonV1beta1().PipelineRuns(namespaceName).Create(ctx, &tektonv1beta1.PipelineRun{
@@ -158,13 +208,6 @@ func CreateNamespace(ctx context.Context, kubeClient kubernetes.Interface, tekto
 						StringVal: namespaceName,
 					},
 				},
-				{
-					Name: "hostname",
-					Value: tektonv1beta1.ArrayOrString{
-						Type:      tektonv1beta1.ParamTypeString,
-						StringVal: fmt.Sprintf("registry-%s.apps.test.gcp.quaydev.org", namespaceName), // FIXME: use the hostname from the route
-					},
-				},
 			},
 			PipelineRef: &tektonv1beta1.PipelineRef{
 				Name: "build",
@@ -199,7 +242,39 @@ func CreateNamespace(ctx context.Context, kubeClient kubernetes.Interface, tekto
 		},
 	}, metav1.CreateOptions{})
 	if err != nil {
-		return "", fmt.Errorf("error creating pipeline run: %w", err)
+		return namespaceName, fmt.Errorf("error creating pipeline run: %w", err)
+	}
+
+	var routeHostname string
+	err = wait.PollImmediateWithContext(ctx, 200*time.Millisecond, 10*time.Second, func(ctx context.Context) (bool, error) {
+		hostname, err := GetRouteHostname(ctx, routeClient, namespaceName)
+		if err == errNoRoute {
+			return false, nil
+		} else if err != nil {
+			return false, fmt.Errorf("error getting route hostname: %w", err)
+		}
+		routeHostname = hostname
+		return true, nil
+	})
+	if err != nil {
+		return namespaceName, fmt.Errorf("error waiting for route hostname: %w", err)
+	}
+
+	config, err := RenderConfig(namespaceName, routeHostname, overrides)
+	if err != nil {
+		return namespaceName, fmt.Errorf("error rendering config: %w", err)
+	}
+
+	_, err = kubeClient.CoreV1().Secrets(namespaceName).Create(ctx, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "quay-app-config",
+		},
+		Data: map[string][]byte{
+			"config.yaml": []byte(config),
+		},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		return namespaceName, fmt.Errorf("error creating config secret: %w", err)
 	}
 
 	return namespaceName, nil
@@ -308,7 +383,11 @@ func main() {
 					http.Error(w, "invalid PR number", http.StatusBadRequest)
 					return
 				}
-				namespaceName, err := CreateNamespace(ctx, kubeClient, tektonClient, routeClient, controllerClient, prNumber)
+				overrides := map[string]interface{}{}
+				if err := yaml.Unmarshal([]byte(r.FormValue("config")), &overrides); err != nil {
+					http.Error(w, fmt.Sprintf("invalid overrides: %v", err), http.StatusBadRequest)
+				}
+				namespaceName, err := CreateNamespace(ctx, kubeClient, tektonClient, routeClient, controllerClient, prNumber, overrides)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return

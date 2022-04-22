@@ -1,0 +1,24 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: build
+spec:
+  pipelineRef:
+    name: build
+  params:
+  - name: git-url
+    value: https://github.com/quay/quay
+  serviceAccountName: pipeline
+  timeout: 1h0m0s
+  workspaces:
+  - name: shared-workspace
+    volumeClaimTemplate:
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 500Mi
+  - name: manifests
+    configMap:
+      name: manifests

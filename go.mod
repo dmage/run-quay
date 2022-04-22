@@ -4,7 +4,6 @@ go 1.17
 
 require (
 	github.com/openshift/api v0.0.0-20220419014147-5308d3d6f668
-	github.com/openshift/client-go v0.0.0-20220411091747-c100636b0bc0
 	github.com/ricardomaraschini/plumber v1.10.0
 	github.com/tektoncd/pipeline v0.34.1
 	k8s.io/api v0.23.5

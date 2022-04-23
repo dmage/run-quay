@@ -59,8 +59,8 @@ function onSubmit(event) {
   <h1>Run Quay</h1>
   <form action="/" method="POST" onsubmit="onSubmit(event)">
   <div class="form-field">
-    <label for="pr">Pull Request Number:</label>
-    <input type="text" name="pr" id="pr">
+    <label for="source">GitHub link to a pull request or a branch:</label>
+    <input type="text" name="source" id="source" placeholder="123 or https://github.com/quay/quay/pull/123">
   </div>
   <details class="form-field">
     <summary>Advanced</summary>

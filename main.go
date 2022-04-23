@@ -8,7 +8,8 @@ import (
 	"html/template"
 	"io"
 	"net/http"
-	"strconv"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/dmage/run-quay/pipeline"
@@ -57,6 +58,48 @@ var (
 var (
 	errNoRoute = fmt.Errorf("no hostname found in route status")
 )
+
+var (
+	githubRepoRegExp        = regexp.MustCompile(`^(?:https?://)github.com/([a-z0-9-]+)/([a-z0-9-]+)$`)
+	githubPullRequestRegExp = regexp.MustCompile(`^(?:https?://)github.com/([a-z0-9-]+)/([a-z0-9-]+)/pull/([0-9]+)(?:/[a-z]+)?$`)
+	githubBranchRegExp      = regexp.MustCompile(`^(?:https?://)github.com/([a-z0-9-]+)/([a-z0-9-]+)/tree/([a-z0-9._-]+)$`)
+	githubTagRegExp         = regexp.MustCompile(`^(?:https?://)github.com/([a-z0-9-]+)/([a-z0-9-]+)/releases/tag/([a-z0-9._-]+)$`)
+	numberRegExp            = regexp.MustCompile(`^[0-9]+$`)
+	nonAlphaNumericRegExp   = regexp.MustCompile(`[^a-zA-Z0-9]+`)
+	multipleHyphensRegExp   = regexp.MustCompile(`--+`)
+)
+
+// ParseSource converts a pull request URL into a git refernce.
+func ParseSource(source string) (string, error) {
+	if match := githubRepoRegExp.FindStringSubmatch(source); match != nil {
+		if match[1] != "quay" || match[2] != "quay" {
+			return "", fmt.Errorf("unsupported repository %s/%s", match[1], match[2])
+		}
+		return "HEAD", nil
+	}
+	if match := githubPullRequestRegExp.FindStringSubmatch(source); match != nil {
+		if match[1] != "quay" || match[2] != "quay" {
+			return "", fmt.Errorf("unsupported repository %s/%s", match[1], match[2])
+		}
+		return fmt.Sprintf("refs/pull/%s/head", match[3]), nil
+	}
+	if match := githubBranchRegExp.FindStringSubmatch(source); match != nil {
+		if match[1] != "quay" || match[2] != "quay" {
+			return "", fmt.Errorf("unsupported repository %s/%s", match[1], match[2])
+		}
+		return fmt.Sprintf("refs/heads/%s", match[3]), nil
+	}
+	if match := githubTagRegExp.FindStringSubmatch(source); match != nil {
+		if match[1] != "quay" || match[2] != "quay" {
+			return "", fmt.Errorf("unsupported repository %s/%s", match[1], match[2])
+		}
+		return fmt.Sprintf("refs/tags/%s", match[3]), nil
+	}
+	if numberRegExp.MatchString(source) {
+		return fmt.Sprintf("refs/pull/%s/head", source), nil
+	}
+	return "", fmt.Errorf("unsupported source %s", source)
+}
 
 // CreatePipelineObjects creates the objects required for a pipeline.
 func CreatePipelineObjects(ctx context.Context, controllerClient client.Client, namespace string) error {
@@ -150,21 +193,45 @@ func RenderConfig(namespace string, hostname string, overrides map[string]interf
 	return string(result), nil
 }
 
+// GitRefSlug returns the slug for a git refernce.
+func GitRefSlug(gitRef string) (string, error) {
+	var slug string
+	if strings.HasPrefix(gitRef, "refs/pull/") && strings.HasSuffix(gitRef, "/head") {
+		slug = strings.TrimSuffix(strings.TrimPrefix(gitRef, "refs/pull/"), "/head")
+	} else {
+		parts := strings.Split(gitRef, "/")
+		slug = parts[len(parts)-1]
+	}
+	slug = strings.ToLower(slug)
+	slug = nonAlphaNumericRegExp.ReplaceAllString(slug, "-")
+	slug = multipleHyphensRegExp.ReplaceAllString(slug, "-")
+	slug = strings.Trim(slug, "-")
+	if slug == "" {
+		return "", fmt.Errorf("unable to generate slug for %q", gitRef)
+	}
+	return slug, nil
+}
+
 // CreateNamespace creates a new namespace for a Quay instance.
-func CreateNamespace(ctx context.Context, kubeClient kubernetes.Interface, tektonClient tektonclientset.Interface, routeClient routeclientset.Interface, controllerClient client.Client, prNumber int, overrides map[string]interface{}) (string, error) {
-	namespaceName := fmt.Sprintf("quay-%d-%s", prNumber, rand.String(5))
+func CreateNamespace(ctx context.Context, kubeClient kubernetes.Interface, tektonClient tektonclientset.Interface, routeClient routeclientset.Interface, controllerClient client.Client, gitRef string, overrides map[string]interface{}) (string, error) {
+	slug, err := GitRefSlug(gitRef)
+	if err != nil {
+		return "", err
+	}
+
+	namespaceName := fmt.Sprintf("quay-%s-%s", slug, rand.String(5))
 	namespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: namespaceName,
 			Annotations: map[string]string{
-				"run-quay/pr-number": strconv.Itoa(prNumber),
+				"run-quay/git-ref": gitRef,
 			},
 			Labels: map[string]string{
 				"run-quay": "true",
 			},
 		},
 	}
-	_, err := kubeClient.CoreV1().Namespaces().Create(ctx, namespace, metav1.CreateOptions{})
+	_, err = kubeClient.CoreV1().Namespaces().Create(ctx, namespace, metav1.CreateOptions{})
 	if err != nil {
 		return "", fmt.Errorf("error creating namespace: %w", err)
 	}
@@ -191,7 +258,7 @@ func CreateNamespace(ctx context.Context, kubeClient kubernetes.Interface, tekto
 					Name: "git-revision",
 					Value: tektonv1beta1.ArrayOrString{
 						Type:      tektonv1beta1.ParamTypeString,
-						StringVal: fmt.Sprintf("refs/pull/%d/head", prNumber),
+						StringVal: gitRef,
 					},
 				},
 				{
@@ -378,16 +445,16 @@ func main() {
 					klog.Errorf("error executing template: %v", err)
 				}
 			case http.MethodPost:
-				prNumber, err := strconv.Atoi(r.FormValue("pr"))
+				gitRef, err := ParseSource(r.FormValue("source"))
 				if err != nil {
-					http.Error(w, "invalid PR number", http.StatusBadRequest)
+					http.Error(w, err.Error(), http.StatusBadRequest)
 					return
 				}
 				overrides := map[string]interface{}{}
 				if err := yaml.Unmarshal([]byte(r.FormValue("config")), &overrides); err != nil {
 					http.Error(w, fmt.Sprintf("invalid overrides: %v", err), http.StatusBadRequest)
 				}
-				namespaceName, err := CreateNamespace(ctx, kubeClient, tektonClient, routeClient, controllerClient, prNumber, overrides)
+				namespaceName, err := CreateNamespace(ctx, kubeClient, tektonClient, routeClient, controllerClient, gitRef, overrides)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return

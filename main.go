@@ -236,6 +236,9 @@ func CreateNamespace(ctx context.Context, kubeClient kubernetes.Interface, tekto
 		return "", fmt.Errorf("error creating namespace: %w", err)
 	}
 
+	// Workaround OSDOCS-3415
+	time.Sleep(1 * time.Second)
+
 	err = CreatePipelineObjects(ctx, controllerClient, namespaceName)
 	if err != nil {
 		return namespaceName, fmt.Errorf("error creating pipeline objects: %w", err)

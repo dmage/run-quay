@@ -316,7 +316,7 @@ func CreateNamespace(ctx context.Context, kubeClient kubernetes.Interface, tekto
 	}
 
 	var routeHostname string
-	err = wait.PollImmediateWithContext(ctx, 200*time.Millisecond, 10*time.Second, func(ctx context.Context) (bool, error) {
+	err = wait.PollImmediateWithContext(ctx, 200*time.Millisecond, 15*time.Second, func(ctx context.Context) (bool, error) {
 		hostname, err := GetRouteHostname(ctx, routeClient, namespaceName)
 		if err == errNoRoute {
 			return false, nil
